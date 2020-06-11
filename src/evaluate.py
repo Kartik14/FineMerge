@@ -8,7 +8,7 @@ from multiprocessing.pool import Pool
 from ctc_alignment import ctc_align
 from merge import get_frame_lvl_cnfs, fine_merge
 from decode import ctc_beam_decode
-from utils import wer
+from utils import wer, normalize_string
 
 data = {}
 labels = []
@@ -18,6 +18,7 @@ def get_merged_transcript(utt):
 
     service_transcript = data[utt]['service_transcript']
     word_confs = data[utt]['word_confs']
+    # word_confs = [1.0]*len(word_confs)
     ds2_probs = data[utt]['ds2_probs']
 
     smoothen_probs = ds2_probs + 1e-20
@@ -68,13 +69,11 @@ def main():
     )
     parser.add_argument(
         "--utterances",
-        help="Path to file containing list of utterance to generate modified transcripts"
-             ", if not provided transcipt generated for all utterances",
+        help="Path to file containing list of tab separated utterance,"
+             " reference to generate modified transcripts",
         type=str,
-        default=None,
-        required=False,        
+        required=True,        
     )
-
     args = parser.parse_args()
 
     global labels
@@ -87,11 +86,10 @@ def main():
 
     global data
     data = np.load(args.dataset, allow_pickle=True)
-    if args.utterances is not None:
-        with open(args.utterances) as fd:
-            utterances = fd.read().splitlines()
-    else:
-        utterances = data.keys()
+    with open(args.utterances) as fd:
+        lines = fd.read().splitlines()
+        utterances = [line.split('\t')[0][:-3] + 'wav' for line in lines]
+        # references = [line.split('\t')[1] for line in lines]    
 
     references = [data[utt]['reference'] for utt in utterances]
     service_transcripts = [data[utt]['service_transcript'] for utt in utterances]
@@ -104,7 +102,6 @@ def main():
 
     print("Applying FineMerge to DS2 probs using service transcripts...")
     with Pool(multiprocessing.cpu_count()) as pool:
-        # new_probs_list = pool.map(get_merged_transcript, utterances)
         new_probs_list = list(tqdm(pool.imap(get_merged_transcript, utterances), total=len(utterances)))
 
     print("Getting the final transcripts...")

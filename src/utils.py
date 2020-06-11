@@ -2,11 +2,14 @@
 
 import numpy as np
 import math
+import string
 import re
 import json
 from collections import defaultdict
 from os.path import join
 import inflect
+from text import _clean_text
+
 
 def get_word2phone(lexicon):
 
@@ -85,6 +88,16 @@ def wer(references, hypothesis):
     
     return total_edits / total_tokens
 
+def cer(refs, hyps):
+
+    total_edits = 0.0
+    total_tokens = 0
+    for ref, hyp in zip(refs, hyps):
+        total_edits += levenshtein(ref, hyp)
+        total_tokens += len(ref)
+
+    return total_edits / total_tokens
+
 def parse_text(text):
 	
     text = text.lower()
@@ -93,7 +106,7 @@ def parse_text(text):
 
     return text
 
-def parse_text2(text, word_confs):
+def parse_text2(text, word_confs=None):
 
 	#converting to lower case
     hyp = text.lower()
@@ -107,18 +120,55 @@ def parse_text2(text, word_confs):
             if word.isdigit():
                 digits_text = p.number_to_words(int(word))
                 hyp1 += digits_text + " "
-                for _ in range(len(digits_text.split())):
-                    new_confs.append(word_confs[i])
+                if word_confs != None:
+                    for _ in range(len(digits_text.split())):
+                        new_confs.append(word_confs[i])
             else:
                 hyp1 += word + " "
-                new_confs.append(word_confs[i])
+                if word_confs != None:
+                    new_confs.append(word_confs[i])
 
     hyp1 = re.sub('[^a-z\' ]','',hyp1)
-
     hyp1 = ' '.join(hyp1.split())
     new_confs = ' '.join(new_confs)
 
-    return hyp1, new_confs
+    if word_confs != None:
+        return hyp1, new_confs  
+    else:
+        return hyp1
+
+def normalize_string(s, labels):
+    """
+    Normalizes string. For example:
+    'call me at 8:00 pm!' -> 'call me at eight zero zero pm'
+    Args:
+        s: string to normalize
+        labels: labels used during model training.
+    Returns:
+            Normalized string
+    """
+
+    def good_token(token, labels):
+        s = set(labels)
+        for t in token:
+            if not t in s:
+                return False
+        return True
+
+    punctuation = string.punctuation
+    punctuation = punctuation.replace("+", "")
+    punctuation = punctuation.replace("&", "")
+    for l in labels:
+        punctuation = punctuation.replace(l, "")
+    # Turn all punctuation to whitespace
+    table = str.maketrans(punctuation, " " * len(punctuation))
+
+    try:
+        text = _clean_text(s, ["english_cleaners"], table).strip()
+        return ''.join([t for t in text if good_token(t, labels=labels)])
+    except:
+        print("WARNING: Normalizing {} failed".format(s))
+        return None
 
 def align(p, q, sub_cost=1.5, ins_cost=1, del_cost=1):
 
@@ -155,7 +205,7 @@ def align(p, q, sub_cost=1.5, ins_cost=1, del_cost=1):
 
     aligned_p, aligned_q = [], []
     i, j = rows-1, cols-1
-    blank = '<eps>'
+    blank = '_'
     while i > 0 or j > 0:
         if parents[i,j] == 0:
             aligned_p.append(p[i-1])
