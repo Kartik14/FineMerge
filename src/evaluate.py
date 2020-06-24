@@ -1,14 +1,16 @@
 import argparse
+import os
 import json
 import numpy as np
 from tqdm import tqdm
+import pandas as pd
 import multiprocessing
 from multiprocessing.pool import Pool
 
 from ctc_alignment import ctc_align
 from merge import get_frame_lvl_cnfs, fine_merge
-from decode import ctc_beam_decode
-from utils import wer, normalize_string
+from decode import ctc_beam_decode, greedy_decode
+from utils import wer, cer, normalize_string, parse_text
 
 data = {}
 labels = []
@@ -18,7 +20,6 @@ def get_merged_transcript(utt):
 
     service_transcript = data[utt]['service_transcript']
     word_confs = data[utt]['word_confs']
-    # word_confs = [1.0]*len(word_confs)
     ds2_probs = data[utt]['ds2_probs']
 
     smoothen_probs = ds2_probs + 1e-20
@@ -43,29 +44,10 @@ def main():
         required=True,
     )
     parser.add_argument(
-        "--labels",
-        help="Path to labels json files containing ordered list of output labels mapping to ds2 probs",
-        type=str,
-        required=True,
-    )
-    parser.add_argument(
         "--params_config",
         help="Path to json config file containing param values",
         type=str,
         required=True,
-    )
-    parser.add_argument(
-        "--output_path",
-        help="Path to save file containing modified transcipt",
-        type=str,
-        required=True,        
-    )
-    parser.add_argument(
-        "--lm_path",
-        help="Path to arpa lm file to use while decoding (optional)",
-        type=str,
-        default=None,
-        required=False,
     )
     parser.add_argument(
         "--utterances",
@@ -73,6 +55,32 @@ def main():
              " reference to generate modified transcripts",
         type=str,
         required=True,        
+    )
+    parser.add_argument(
+        "--output_path",
+        help="Path to save file containing modified transcipt",
+        type=str,
+        default='final_preds.txt'        
+    )
+    parser.add_argument(
+        "--labels",
+        help="Path to labels json files containing ordered list of output labels mapping to ds2 probs",
+        type=str,
+        required=False,
+        default='labels_char.json',
+    )
+    parser.add_argument(
+        "--lm_path",
+        help="Path to arpa lm file to use while decoding",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--save_modified_probs",
+        help="Path to save the new probs",
+        type=str,
+        required=False,
+        default=None,        
     )
     args = parser.parse_args()
 
@@ -86,12 +94,13 @@ def main():
 
     global data
     data = np.load(args.dataset, allow_pickle=True)
-    with open(args.utterances) as fd:
-        lines = fd.read().splitlines()
-        utterances = [line.split('\t')[0][:-3] + 'wav' for line in lines]
-        # references = [line.split('\t')[1] for line in lines]    
+    df_utt = pd.read_csv(args.utterances, delimiter='\t')    
+    df_utt = df_utt[df_utt['file_name'].isin(data.keys())] #TODO
+    utterances = df_utt['file_name'].to_list()
+    references = df_utt['transcript'].to_list()
+    references = [normalize_string(text, labels[1:]) for text in references]
+    # references = [parse_text(text) for text in references]
 
-    references = [data[utt]['reference'] for utt in utterances]
     service_transcripts = [data[utt]['service_transcript'] for utt in utterances]
     probs_list = [data[utt]['ds2_probs'] for utt in utterances]
 
@@ -99,16 +108,19 @@ def main():
     ds2_transcripts = ctc_beam_decode(probs_list, labels, args.lm_path, labels.index('_'),
         params['ds2_lm_alpha'], params['ds2_lm_beta'], params['beam_size'])
 
-
     print("Applying FineMerge to DS2 probs using service transcripts...")
     with Pool(multiprocessing.cpu_count()) as pool:
         new_probs_list = list(tqdm(pool.imap(get_merged_transcript, utterances), total=len(utterances)))
 
+    if args.save_modified_probs:
+        np.save(args.save_modified_probs, list(zip(utterances, new_probs_list)))
+
     print("Getting the final transcripts...")
     new_transcipts = ctc_beam_decode(new_probs_list, labels, args.lm_path, labels.index('_'),
         params['lm_alpha'], params['lm_beta'], params['beam_size'])
-    
-    print("\nSER WER: {}".format(wer(references, service_transcripts)))
+
+    print("\nNumber utterances : {}".format(len(references)))
+    print("SER WER: {}".format(wer(references, service_transcripts)))
     print("DS2 WER: {}".format(wer(references, ds2_transcripts)))
     print("NEW WER : {}\n".format(wer(references, new_transcipts)))
 

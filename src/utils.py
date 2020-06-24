@@ -93,25 +93,22 @@ def cer(refs, hyps):
     total_edits = 0.0
     total_tokens = 0
     for ref, hyp in zip(refs, hyps):
+        # ref = list(ref.replace(' ', ''))
+        # hyp = list(hyp.replace(' ', ''))
         total_edits += levenshtein(ref, hyp)
         total_tokens += len(ref)
 
     return total_edits / total_tokens
 
-def parse_text(text):
-	
-    text = text.lower()
-    text = re.sub('[^a-z\' ]','',text)
-    text = ' '.join(text.split())
-
-    return text
-
-def parse_text2(text, word_confs=None):
+def parse_text(text, word_confs=None):
 
 	#converting to lower case
     hyp = text.lower()
     hyp = re.sub('[^a-z0-9\' ]','',hyp)
 
+    if word_confs != None:
+        word_confs = word_confs.split()
+        
     # converting digits to text
     p = inflect.engine()
     hyp1 = ""
@@ -130,7 +127,7 @@ def parse_text2(text, word_confs=None):
 
     hyp1 = re.sub('[^a-z\' ]','',hyp1)
     hyp1 = ' '.join(hyp1.split())
-    new_confs = ' '.join(new_confs)
+    new_confs = [float(x) for x in new_confs]
 
     if word_confs != None:
         return hyp1, new_confs  

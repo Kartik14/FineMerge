@@ -24,7 +24,7 @@ def main():
     )
     parser.add_argument(
         "--exclude_text",
-        help="Path to text file whose sentences must be excluded for training",
+        help="Path to text file whose sentences must be excluded from training",
         type=str,
         required=True,
     )

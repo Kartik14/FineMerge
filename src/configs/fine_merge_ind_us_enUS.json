@@ -1,0 +1,11 @@
+{
+    "threshold" : 2e-14,
+    "blank_threshold" : 2e-12,
+    "service_weight" : 0.90,
+    "blank_conf" : 0.50,
+    "ds2_lm_alpha" : 0.60,
+    "ds2_lm_beta" : 0.70,
+    "lm_alpha" : 0.3,
+    "lm_beta" : 0.1,
+    "beam_size" : 256
+}

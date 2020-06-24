@@ -7,8 +7,7 @@ import sys
 from os.path import join, basename, dirname
 
 sys.path.append(dirname(dirname(os.path.abspath(__file__))))
-from utils import parse_text
-
+from utils import normalize_string, parse_text
 
 def main():
     
@@ -22,20 +21,28 @@ def main():
         required=True,
     )
     parser.add_argument(
+        "--labels",
+        help="Path to ds2 output labels",
+        type=str,
+        required=False,
+        default='../labels_char.json'
+    )
+    parser.add_argument(
         "--output_path",
         help="Path to save output pickle file",
         type=str,
         required=True,
     )
+    args = parser.parse_args()
 
     dataset = {}
-
-    args = parser.parse_args()
     json_files = glob.glob(join(args.json_dir, '*.json'))
+    with open(args.labels) as label_file:
+        labels = json.load(label_file)
 
     for json_pth in json_files:
 
-        file_name = basename(json_pth)
+        file_name = basename(json_pth).replace('.json','.wav')
         try:
             with open(json_pth) as fd:
                 data = json.load(fd)
@@ -45,7 +52,8 @@ def main():
 
         for rank, alt in enumerate(data['results'][0]['alternatives']):
 
-            transcript = parse_text(alt['transcript'])
+            transcript = normalize_string(alt['transcript'], labels[1:])
+            # transcript = parse_text(alt['transcript'])
             confidence = alt['confidence']
             if rank == 0:    
                 dataset[file_name] = {'transcripts' : [transcript], 'confidences' : [confidence]}
