@@ -91,7 +91,7 @@ def get_merged_transcript(utt):
     global args, data, labels
     service_transcript = data[utt]['service_transcript']
     word_confs = data[utt]['word_confs']
-    ds2_probs = data[utt]['ds2_probs']
+    ds2_probs = data[utt]['local_probs']
 
     smoothen_probs = ds2_probs + 1e-20
     smoothen_probs = smoothen_probs/np.sum(smoothen_probs, axis=1, keepdims=1)
